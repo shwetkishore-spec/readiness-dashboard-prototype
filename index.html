@@ -1,0 +1,490 @@
+<title>Agent Readiness Console</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one working console. Summary strip, then a scannable service table; detail opens in a right-hand drawer. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --ink: #15202b;
+  --muted: #5a6674;
+  --line: #dde2e8;
+  --accent: #0e6b66;
+  --accent-soft: #e0f0ee;
+  --crit: #b42318;
+  --crit-soft: #fcebe9;
+  --warn: #9a5a06;
+  --warn-soft: #fbefd9;
+  --ok: #1d7540;
+  --ok-soft: #e2f2e7;
+  --add-bg: #e6f4ea;
+  --del-bg: #fbe9e8;
+  --shadow: 0 12px 40px rgba(16, 28, 40, .18);
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1419; --surface: #161d24; --ink: #e5eaef; --muted: #93a0ac; --line: #27313b;
+    --accent: #52c2b8; --accent-soft: #12302d; --crit: #ff8f86; --crit-soft: #3b1b19;
+    --warn: #f0b55c; --warn-soft: #382811; --ok: #72d295; --ok-soft: #15301f;
+    --add-bg: #15301f; --del-bg: #3b1b19; --shadow: 0 12px 40px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1419; --surface: #161d24; --ink: #e5eaef; --muted: #93a0ac; --line: #27313b;
+  --accent: #52c2b8; --accent-soft: #12302d; --crit: #ff8f86; --crit-soft: #3b1b19;
+  --warn: #f0b55c; --warn-soft: #382811; --ok: #72d295; --ok-soft: #15301f;
+  --add-bg: #15301f; --del-bg: #3b1b19; --shadow: 0 12px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 48px; display: grid; gap: 20px; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
+.eyebrow { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.eyebrow .tag { color: var(--warn); background: var(--warn-soft); padding: 2px 8px; border-radius: 999px; margin-left: 8px; letter-spacing: .04em; }
+h1 { margin: 4px 0 2px; font-size: 26px; font-weight: 700; letter-spacing: -.01em; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0; }
+.meta { color: var(--muted); font-size: 12.5px; text-align: right; }
+.meta strong { color: var(--ink); font-weight: 600; }
+
+/* Summary strip */
+.summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.stat { padding: 14px 16px; display: grid; gap: 2px; border-left: 1px solid var(--line); min-width: 0; }
+.stat:first-child { border-left: 0; }
+.stat .label { font-size: 12px; color: var(--muted); }
+.stat .value { font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
+.stat .value small { font-size: 13px; color: var(--muted); font-weight: 500; }
+.stat .note { font-size: 12px; color: var(--muted); }
+.stat.north .value { color: var(--accent); }
+.stat .delta-good { color: var(--ok); font-weight: 600; }
+
+/* Controls */
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.search { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 7px 12px; font: inherit; width: 240px; max-width: 100%; }
+
+/* Table */
+.tablebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 760px; }
+th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface); white-space: nowrap; }
+th button { background: none; border: 0; padding: 0; cursor: pointer; font-weight: 600; color: inherit; }
+th button:hover { color: var(--ink); }
+tbody tr { cursor: pointer; }
+tbody tr:hover, tbody tr.active { background: var(--accent-soft); }
+tbody tr:last-child td { border-bottom: 0; }
+.svc { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; display: grid; }
+.svc .name { font-family: var(--mono); font-weight: 500; font-size: 13.5px; }
+.svc .ops { font-size: 12px; color: var(--muted); }
+.score { display: grid; gap: 4px; width: 92px; }
+.score .n { font-weight: 600; font-size: 15px; }
+.bar { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+
+.level { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.steps { display: inline-flex; gap: 2px; }
+.steps i { width: 6px; height: 14px; border-radius: 2px; background: var(--line); }
+.steps i.on { background: var(--accent); }
+.level b { font-weight: 600; }
+.level span { color: var(--muted); font-size: 12.5px; }
+
+.finding { display: flex; gap: 8px; align-items: baseline; max-width: 360px; }
+.sev { flex: none; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 1px 7px; border-radius: 999px; }
+.sev.blocker { color: var(--crit); background: var(--crit-soft); }
+.sev.major { color: var(--warn); background: var(--warn-soft); }
+.sev.minor { color: var(--muted); background: var(--bg); border: 1px solid var(--line); }
+.finding .t { min-width: 0; }
+.prs { font-weight: 600; }
+.prs.zero { color: var(--muted); font-weight: 400; }
+.spark { display: block; }
+.empty { padding: 28px; text-align: center; color: var(--muted); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12.5px; color: var(--muted); }
+.legend b { color: var(--ink); font-weight: 600; }
+
+/* Drawer */
+.scrim { position: fixed; inset: 0; background: rgba(10, 18, 26, .35); z-index: 20; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); z-index: 21;
+  background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow);
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  transform: translateX(0); transition: transform .22s ease;
+}
+.drawer[hidden] { display: none !important; }
+.dhead { padding: 18px 22px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+.dtitle { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.dtitle h2 { margin: 0; font-family: var(--mono); font-size: 18px; font-weight: 500; overflow-wrap: anywhere; }
+.dtitle .owner { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.close { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 18px; line-height: 1; flex: none; }
+.dstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.dstat { background: var(--bg); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.dstat .label { font-size: 11.5px; color: var(--muted); }
+.dstat .value { font-weight: 600; font-size: 16px; }
+.gate { font-size: 13px; background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; }
+.gate b { color: var(--accent); }
+.dbody { overflow-y: auto; padding: 16px 22px 28px; display: grid; gap: 14px; align-content: start; }
+.dbody h3 { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.fcard { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; }
+.fcard .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.fcard .ftitle { font-weight: 600; flex: 1 1 260px; min-width: 0; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--muted); }
+.tags span { border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; }
+.evidence { font-size: 13px; display: grid; gap: 4px; }
+.evidence .label { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+pre, code { font-family: var(--mono); font-size: 12.5px; }
+.evidence pre { margin: 0; background: var(--bg); border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fixbtn { justify-self: start; border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 8px; padding: 6px 12px; cursor: pointer; font-weight: 600; font-size: 13px; }
+.fixbtn:hover { background: var(--accent-soft); }
+.fix { display: grid; gap: 8px; }
+.fix .fixhead { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+.fix .fixhead b { color: var(--ink); }
+.diff { margin: 0; border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; padding: 6px 0; background: var(--surface); }
+.diff div { padding: 0 10px; white-space: pre; }
+.diff .add { background: var(--add-bg); }
+.diff .del { background: var(--del-bg); }
+.nofix { font-size: 13px; color: var(--muted); background: var(--bg); padding: 8px 10px; border-radius: 6px; }
+
+@media (max-width: 900px) {
+  .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat { border-left: 0; border-top: 1px solid var(--line); }
+  .stat:nth-child(-n+2) { border-top: 0; }
+  .stat:nth-child(even) { border-left: 1px solid var(--line); }
+  .stat:last-child { grid-column: 1 / -1; border-left: 0; }
+  .meta { text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Agent readiness <span class="tag">Prototype · sample data</span></div>
+      <h1>Infra Provisioning services</h1>
+      <p class="sub">How ready each service is for AI agents to use, and what to fix next.</p>
+    </div>
+    <div class="meta">Owner <strong>Infra Provisioning team</strong><br>Last scan <strong>today, 02:10</strong> · Rubric <strong>v1.2</strong></div>
+  </header>
+
+  <section class="summary" aria-label="Team summary" id="summary"></section>
+
+  <div class="controls">
+    <div class="chips" role="group" aria-label="Filter by level" id="chips"></div>
+    <input class="search" id="search" type="search" placeholder="Search services or findings" aria-label="Search services or findings">
+  </div>
+
+  <div class="tablebox">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col"><button data-sort="name">Service</button></th>
+          <th scope="col"><button data-sort="score">Score ↓</button></th>
+          <th scope="col"><button data-sort="level">Level</button></th>
+          <th scope="col">Top finding</th>
+          <th scope="col"><button data-sort="prs">Open fix PRs</button></th>
+          <th scope="col">6-week trend</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <div class="legend">
+    <span><b>L0</b> Invisible</span><span><b>L1</b> Discoverable</span><span><b>L2</b> Callable</span>
+    <span><b>L3</b> Operable</span><span><b>L4</b> Autonomous with guardrails</span>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dname" hidden></aside>
+
+<script>
+const LEVELS = ["Invisible", "Discoverable", "Callable", "Operable", "Autonomous with guardrails"];
+const NEXT_GATE = [
+  "Register an owner and catalog entry, and expose the service through the MCP gateway.",
+  "Publish a valid spec with no blocker findings.",
+  "Stand up a sandbox, and have agents pass golden tasks reliably (pass^3 at least 80%).",
+  "Add agent-scoped roles, enforce policy in the policy engine, and hold 90%+ production success for 4 weeks.",
+  "Top level reached. Keep production success above 90% with no agent-caused incidents."
+];
+
+const SERVICES = [
+  { name: "namespace-provisioner", ops: 14, score: 58, level: 1, prs: 1, tasks: 412, touches: 138, trend: [41,44,47,52,55,58], findings: [
+    { sev: "blocker", title: "Policy requires cost_center, but the spec doesn't mention it", dim: "Spec quality", tier: "Sandbox eval",
+      evidence: "Eval run ev-2291: agent created the namespace, then admission policy NS-LABEL-01 rejected it for a missing cost-center label. Failed 4 of 9 tasks.",
+      fix: { pr: 482, status: "Open, awaiting review", lift: "+11 pts, unblocks L2", diff: [
+        "  properties:", "    team: { type: string }", "    env:  { type: string, enum: [dev, staging] }",
+        "+   cost_center:", "+     type: string", "+     pattern: '^CC-[0-9]{5}$'", "+     description: Required by policy NS-LABEL-01. Look it up with get_team_profile.",
+        "  required: [team, env]", "+ required: [team, env, cost_center]" ] } },
+    { sev: "major", title: "Errors return 400 with no reason", dim: "Error recoverability", tier: "Static check",
+      evidence: "responses:\n  '400':\n    description: Bad Request",
+      fix: { pr: 482, status: "Included in the same PR", lift: "+6 pts", diff: [
+        "  '400':", "-   description: Bad Request", "+   description: Request is invalid. The body says which field and how to fix it.",
+        "+   content:", "+     application/problem+json:", "+       schema: { $ref: '#/components/schemas/Problem' }" ] } },
+    { sev: "major", title: "Description doesn't say when not to use it", dim: "Spec quality", tier: "LLM judge",
+      evidence: "Judge, criterion C2 (Usage guidance): FAIL. \"Summary 'Creates ns' only restates the path. Nothing says whether production is allowed.\"",
+      fix: { pr: null, status: "Draft ready, not yet opened", lift: "+4 pts", diff: [
+        "- summary: Creates ns", "+ summary: Create a Kubernetes namespace for a team",
+        "+ description: Use for new dev or staging environments. Not for production; use request_prod_namespace instead." ] } }
+  ]},
+  { name: "secrets-rotation", ops: 6, score: 34, level: 1, prs: 0, tasks: 96, touches: 81, trend: [30,31,31,33,34,34], findings: [
+    { sev: "blocker", title: "Rotation steps live only on a wiki page", dim: "Operability", tier: "Static check",
+      evidence: "No runbook found in /agent-docs. Wiki page \"Rotating DB creds (2023)\" linked from the catalog, last edited 19 months ago.",
+      fix: { pr: null, status: "Draft generated from wiki and 6 incident tickets", lift: "+9 pts", diff: [
+        "+ # agent-docs/runbooks/rotate-db-credentials.md", "+ 1. Call rotate_db_credentials with db_id and env.",
+        "+ 2. Poll get_rotation_status(job_id) until state is complete.", "+ 3. Confirm apps reconnected: check error rate on the service dashboard.",
+        "+ If state is failed: call rollback_rotation(job_id) and page the owning team." ] } },
+    { sev: "major", title: "rotate_db_credentials is not safe to retry", dim: "Safety", tier: "Sandbox eval",
+      evidence: "Eval run ev-2310: agent retried after a timeout and triggered two rotations; the first password was invalidated mid-deploy.",
+      fix: null },
+    { sev: "major", title: "Rotation runs async with no status endpoint", dim: "Operability", tier: "Static check",
+      evidence: "POST /rotations returns 202 with an empty body. No GET operation for job status.",
+      fix: null }
+  ]},
+  { name: "dns-manager", ops: 9, score: 72, level: 2, prs: 2, tasks: 233, touches: 41, trend: [60,63,66,68,70,72], findings: [
+    { sev: "major", title: "record_type is free text instead of a fixed list", dim: "Spec quality", tier: "Static check",
+      evidence: "record_type: { type: string }   # agents sent 'cname', 'CNAME ' and 'alias'",
+      fix: { pr: 517, status: "Open, 1 approval", lift: "+5 pts", diff: [
+        "- record_type: { type: string }", "+ record_type:", "+   type: string", "+   enum: [A, AAAA, CNAME, TXT, MX]", "+   example: CNAME" ] } },
+    { sev: "minor", title: "ttl has no example or unit", dim: "Spec quality", tier: "LLM judge",
+      evidence: "Judge, criterion C3 (Inputs described): FAIL. \"ttl has no unit; seconds or minutes is unclear.\"",
+      fix: { pr: 518, status: "Open", lift: "+2 pts", diff: [ "- ttl: { type: integer }", "+ ttl: { type: integer, description: Time to live in seconds, minimum: 60, example: 300 }" ] } }
+  ]},
+  { name: "cert-issuer", ops: 5, score: 81, level: 3, prs: 0, tasks: 158, touches: 9, trend: [70,74,78,80,81,81], findings: [
+    { sev: "major", title: "Agents share one service account instead of a scoped role", dim: "Access readiness", tier: "Identity scan",
+      evidence: "All agent calls in the last 30 days used svc-cert-automation, which can also revoke certificates. Blocks L4.",
+      fix: null },
+    { sev: "minor", title: "202 response has no schema", dim: "Spec quality", tier: "Static check",
+      evidence: "responses: { '202': { description: Accepted } }",
+      fix: { pr: null, status: "Draft ready", lift: "+1 pt", diff: [ "  '202':", "+   content:", "+     application/json:", "+       schema: { $ref: '#/components/schemas/IssueJob' }" ] } }
+  ]},
+  { name: "cost-allocation", ops: 11, score: 47, level: 1, prs: 1, tasks: 140, touches: 77, trend: [45,44,46,46,47,47], findings: [
+    { sev: "blocker", title: "amount has no currency or unit", dim: "Spec quality", tier: "LLM judge",
+      evidence: "Judge, criterion C3: FAIL. \"amount is a number with no currency and no indication whether it is dollars or cents.\"",
+      fix: { pr: 503, status: "Changes requested by owner", lift: "+8 pts", diff: [
+        "- amount: { type: number }", "+ amount_cents: { type: integer, description: Amount in US cents, example: 125000 }", "+ currency: { type: string, enum: [USD], example: USD }" ] } },
+    { sev: "major", title: "Offset pagination let an agent pull 50,000 rows", dim: "Operability", tier: "Sandbox eval",
+      evidence: "Eval run ev-2275: agent called list_charges with no limit and filled its context. Task failed after 3 retries.",
+      fix: null }
+  ]},
+  { name: "quota-service", ops: 7, score: 66, level: 2, prs: 1, tasks: 188, touches: 34, trend: [58,60,62,64,66,66], findings: [
+    { sev: "major", title: "No sandbox, so agent evals can't run (blocks L3)", dim: "Operability", tier: "Catalog scan",
+      evidence: "No sandbox environment registered for quota-service. Golden tasks exist (12) but cannot execute.",
+      fix: null },
+    { sev: "minor", title: "Limit names are inconsistent: cpu, cpus, vcpu", dim: "Spec quality", tier: "LLM judge",
+      evidence: "Judge, criterion C1: three operations use different names for the same limit.",
+      fix: { pr: 529, status: "Open", lift: "+2 pts", diff: [ "- cpus: { type: integer }", "+ cpu: { type: integer, description: Number of vCPUs }" ] } }
+  ]},
+  { name: "deploy-orchestrator", ops: 12, score: 88, level: 4, prs: 0, tasks: 1240, touches: 52, trend: [79,82,84,86,87,88], findings: [
+    { sev: "minor", title: "rollback_deploy doesn't say how long it takes", dim: "Spec quality", tier: "LLM judge",
+      evidence: "Judge, criterion C6: \"Agents polled status every second for up to 9 minutes; expected duration is not stated.\"",
+      fix: { pr: null, status: "Draft ready", lift: "+1 pt", diff: [ "  description: Roll back to the previous healthy release.", "+   Usually completes in 2 to 6 minutes. Poll get_deploy_status every 30 seconds." ] } }
+  ]},
+  { name: "artifact-registry", ops: 10, score: 76, level: 3, prs: 1, tasks: 305, touches: 22, trend: [69,71,73,74,75,76], findings: [
+    { sev: "major", title: "delete_artifact isn't marked as destructive", dim: "Safety", tier: "Static check",
+      evidence: "DELETE /artifacts/{id} has no destructive annotation, so hosts don't ask for approval.",
+      fix: { pr: 531, status: "Open", lift: "+4 pts", diff: [ "  delete:", "    operationId: delete_artifact", "+   x-mcp-annotations:", "+     destructiveHint: true" ] } },
+    { sev: "minor", title: "List results have no default page size", dim: "Operability", tier: "Static check",
+      evidence: "GET /artifacts: limit parameter is optional with no default.",
+      fix: { pr: null, status: "Draft ready", lift: "+1 pt", diff: [ "- limit: { type: integer }", "+ limit: { type: integer, default: 50, maximum: 200 }" ] } }
+  ]},
+  { name: "cluster-registry", ops: 8, score: 52, level: 2, prs: 0, tasks: 119, touches: 46, trend: [52,52,51,52,52,52], findings: [
+    { sev: "major", title: "Operation names mirror old paths (getClusters2)", dim: "Discoverability", tier: "LLM judge",
+      evidence: "Judge, criterion C1: FAIL for 5 of 8 operations. Example: getClusters2, postClusterV1Ext.",
+      fix: { pr: null, status: "Draft ready", lift: "+6 pts", diff: [ "- operationId: getClusters2", "+ operationId: list_clusters", "- operationId: postClusterV1Ext", "+ operationId: register_cluster" ] } },
+    { sev: "major", title: "No error schema on any operation", dim: "Error recoverability", tier: "Static check",
+      evidence: "0 of 8 operations document error responses.", fix: null }
+  ]},
+  { name: "feature-flags", ops: 6, score: 91, level: 4, prs: 0, tasks: 860, touches: 11, trend: [86,88,89,90,91,91], findings: [
+    { sev: "minor", title: "Examples use retired flag keys", dim: "Spec quality", tier: "Static check",
+      evidence: "example: checkout_v2_beta  # retired 2026-06",
+      fix: { pr: null, status: "Draft ready", lift: "+1 pt", diff: [ "- example: checkout_v2_beta", "+ example: payroll_bulk_export" ] } }
+  ]},
+  { name: "log-pipeline", ops: 8, score: 22, level: 0, prs: 0, tasks: 0, touches: 0, trend: [22,22,22,22,22,22], findings: [
+    { sev: "blocker", title: "Not in the service catalog and has no owner", dim: "Discoverability", tier: "Catalog scan",
+      evidence: "Traffic seen at logs-ingest.internal, but no catalog entry or owning team is recorded.", fix: null },
+    { sev: "blocker", title: "No OpenAPI spec published", dim: "Spec quality", tier: "Static check",
+      evidence: "No spec found in the repo or the API registry.",
+      fix: { pr: null, status: "Draft spec inferred from 7 days of traffic", lift: "Unblocks L1", diff: [ "+ openapi: 3.1.0", "+ info: { title: log-pipeline, version: 0.1.0 }", "+ paths:", "+   /streams: { get: { operationId: list_log_streams } }" ] } }
+  ]},
+  { name: "build-runner", ops: 9, score: 63, level: 2, prs: 3, tasks: 690, touches: 118, trend: [55,57,58,60,62,63], findings: [
+    { sev: "major", title: "Long builds return 202 with no job ID", dim: "Operability", tier: "Sandbox eval",
+      evidence: "Eval run ev-2302: agent reported \"build started\" as success; build failed 14 minutes later unnoticed.",
+      fix: { pr: 540, status: "Open, 2 approvals", lift: "+7 pts", diff: [ "  '202':", "-   description: Accepted", "+   description: Build queued. Poll get_build_status with the returned build_id.", "+   content:", "+     application/json:", "+       schema: { properties: { build_id: { type: string } } }" ] } },
+    { sev: "minor", title: "Timeout parameter has no maximum", dim: "Safety", tier: "Static check",
+      evidence: "timeout_minutes: { type: integer }",
+      fix: { pr: 541, status: "Open", lift: "+1 pt", diff: [ "- timeout_minutes: { type: integer }", "+ timeout_minutes: { type: integer, default: 30, maximum: 120 }" ] } }
+  ]}
+];
+
+const sevRank = { blocker: 0, major: 1, minor: 2 };
+SERVICES.forEach(s => s.findings.sort((a, b) => sevRank[a.sev] - sevRank[b.sev]));
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let filter = "all", query = "", sortKey = "score", sortDir = -1, lastFocus = null;
+
+function renderSummary() {
+  const avg = Math.round(SERVICES.reduce((a, s) => a + s.score, 0) / SERVICES.length);
+  const l3 = SERVICES.filter(s => s.level >= 3).length;
+  const blockers = SERVICES.reduce((a, s) => a + s.findings.filter(f => f.sev === "blocker").length, 0);
+  const prs = SERVICES.reduce((a, s) => a + s.prs, 0);
+  const touches = SERVICES.reduce((a, s) => a + s.touches, 0);
+  const tasks = SERVICES.reduce((a, s) => a + s.tasks, 0);
+  $("summary").innerHTML = `
+    <div class="stat north"><span class="label">Human touches, last 7 days</span><span class="value num">${touches}</span><span class="note num">${Math.round(touches / tasks * 100)}% of ${tasks.toLocaleString()} agent tasks</span></div>
+    <div class="stat"><span class="label">Average score</span><span class="value num">${avg}<small> / 100</small></span><span class="note"><span class="delta-good">+5</span> in 6 weeks</span></div>
+    <div class="stat"><span class="label">Services at L3 or above</span><span class="value num">${l3}<small> of ${SERVICES.length}</small></span><span class="note">Target: 6 by end of quarter</span></div>
+    <div class="stat"><span class="label">Open blockers</span><span class="value num">${blockers}</span><span class="note">Across ${SERVICES.filter(s => s.findings.some(f => f.sev === "blocker")).length} services</span></div>
+    <div class="stat"><span class="label">Open fix PRs</span><span class="value num">${prs}</span><span class="note">Generated by the platform</span></div>`;
+}
+
+function renderChips() {
+  const opts = [["all", "All levels"], ...LEVELS.map((n, i) => [String(i), `L${i}`])];
+  $("chips").innerHTML = opts.map(([v, label]) => {
+    const count = v === "all" ? SERVICES.length : SERVICES.filter(s => s.level === +v).length;
+    return `<button class="chip" data-v="${v}" aria-pressed="${filter === v}">${label} <span class="num">(${count})</span></button>`;
+  }).join("");
+}
+
+function steps(level) {
+  return `<span class="steps" aria-hidden="true">${[1,2,3,4].map(i => `<i class="${i <= level ? "on" : ""}"></i>`).join("")}</span>`;
+}
+
+function spark(vals) {
+  const w = 72, h = 22, min = Math.min(...vals) - 2, max = Math.max(...vals) + 2;
+  const pts = vals.map((v, i) => [i * (w - 4) / (vals.length - 1) + 2, h - 2 - (v - min) / (max - min) * (h - 4)]);
+  const line = pts.map(p => p.map(n => n.toFixed(1)).join(",")).join(" ");
+  const last = pts.at(-1);
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Score from ${vals[0]} to ${vals.at(-1)}">
+    <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round"/>
+    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.5" fill="var(--accent)"/></svg>`;
+}
+
+function visible() {
+  const q = query.trim().toLowerCase();
+  return SERVICES
+    .filter(s => filter === "all" || s.level === +filter)
+    .filter(s => !q || s.name.includes(q) || s.findings.some(f => f.title.toLowerCase().includes(q)))
+    .sort((a, b) => sortKey === "name" ? a.name.localeCompare(b.name) * -sortDir : (a[sortKey] - b[sortKey]) * sortDir);
+}
+
+function renderRows() {
+  const list = visible();
+  if (!list.length) { $("rows").innerHTML = `<tr><td colspan="6" class="empty">No services match. Clear the search or pick another level.</td></tr>`; return; }
+  $("rows").innerHTML = list.map(s => {
+    const f = s.findings[0];
+    return `<tr data-name="${s.name}">
+      <td><button class="svc" data-open="${s.name}"><span class="name">${s.name}</span><span class="ops">${s.ops} operations</span></button></td>
+      <td><div class="score"><span class="n num">${s.score}</span><span class="bar"><i style="width:${s.score}%"></i></span></div></td>
+      <td><span class="level">${steps(s.level)}<b>L${s.level}</b><span>${LEVELS[s.level]}</span></span></td>
+      <td><div class="finding"><span class="sev ${f.sev}">${f.sev}</span><span class="t">${esc(f.title)}</span></div></td>
+      <td><span class="prs num ${s.prs ? "" : "zero"}">${s.prs || "None"}</span></td>
+      <td>${spark(s.trend)}</td></tr>`;
+  }).join("");
+  document.querySelectorAll("th button").forEach(b => {
+    const k = b.dataset.sort, base = b.textContent.replace(/ [↑↓]$/, "");
+    b.textContent = base + (k === sortKey ? (sortDir < 0 ? " ↓" : " ↑") : "");
+  });
+}
+
+function fixBlock(f, i) {
+  if (!f.fix) return `<div class="nofix" id="fix-${i}" hidden>No automatic fix. This needs a design change by the owning team. The platform has added it to their readiness backlog.</div>`;
+  const pr = f.fix.pr ? `<b>PR #${f.fix.pr}</b> · ${esc(f.fix.status)}` : `<b>Not yet opened</b> · ${esc(f.fix.status)}`;
+  const lines = f.fix.diff.map(l => {
+    const cls = l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : "";
+    return `<div class="${cls}">${esc(l)}</div>`;
+  }).join("");
+  return `<div class="fix" id="fix-${i}" hidden>
+    <div class="fixhead"><span>${pr}</span><span>Expected: <b>${esc(f.fix.lift)}</b></span></div>
+    <pre class="diff">${lines}</pre></div>`;
+}
+
+function openDrawer(name) {
+  const s = SERVICES.find(x => x.name === name);
+  if (!s) return;
+  lastFocus = document.activeElement;
+  document.querySelectorAll("tbody tr").forEach(r => r.classList.toggle("active", r.dataset.name === name));
+  const rate = s.tasks ? Math.round((s.tasks - s.touches) / s.tasks * 100) + "%" : "No traffic";
+  $("drawer").innerHTML = `
+    <div class="dhead">
+      <div class="dtitle">
+        <div><h2 id="dname">${s.name}</h2><div class="owner">Infra Provisioning team · ${s.ops} operations</div></div>
+        <button class="close" id="close" aria-label="Close">×</button>
+      </div>
+      <div class="dstats">
+        <div class="dstat"><div class="label">Score</div><div class="value num">${s.score} / 100</div></div>
+        <div class="dstat"><div class="label">Level</div><div class="value">L${s.level} ${LEVELS[s.level].split(" ")[0]}</div></div>
+        <div class="dstat"><div class="label">Done without a human</div><div class="value num">${rate}</div></div>
+      </div>
+      <div class="gate"><b>${s.level < 4 ? `To reach L${s.level + 1}:` : "Status:"}</b> ${NEXT_GATE[s.level]}</div>
+    </div>
+    <div class="dbody">
+      <h3>Findings (${s.findings.length})</h3>
+      ${s.findings.map((f, i) => `
+        <article class="fcard">
+          <div class="row"><span class="sev ${f.sev}">${f.sev}</span><span class="ftitle">${esc(f.title)}</span></div>
+          <div class="tags"><span>${f.dim}</span><span>Found by: ${f.tier}</span></div>
+          <div class="evidence"><span class="label">Evidence</span><pre>${esc(f.evidence)}</pre></div>
+          <button class="fixbtn" data-fix="${i}" aria-expanded="false" aria-controls="fix-${i}">View suggested fix</button>
+          ${fixBlock(f, i)}
+        </article>`).join("")}
+    </div>`;
+  $("scrim").hidden = false;
+  $("drawer").hidden = false;
+  $("close").focus();
+}
+
+function closeDrawer() {
+  $("drawer").hidden = true;
+  $("scrim").hidden = true;
+  document.querySelectorAll("tbody tr.active").forEach(r => r.classList.remove("active"));
+  if (lastFocus) lastFocus.focus();
+}
+
+$("chips").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  filter = b.dataset.v; renderChips(); renderRows();
+});
+$("search").addEventListener("input", e => { query = e.target.value; renderRows(); });
+document.querySelector("thead").addEventListener("click", e => {
+  const b = e.target.closest("button[data-sort]"); if (!b) return;
+  const k = b.dataset.sort;
+  if (k === sortKey) sortDir *= -1; else { sortKey = k; sortDir = k === "name" ? -1 : -1; }
+  renderRows();
+});
+$("rows").addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-name]"); if (tr) openDrawer(tr.dataset.name);
+});
+$("drawer").addEventListener("click", e => {
+  if (e.target.closest("#close")) return closeDrawer();
+  const b = e.target.closest(".fixbtn"); if (!b) return;
+  const panel = $("fix-" + b.dataset.fix);
+  const open = panel.hidden;
+  panel.hidden = !open;
+  b.setAttribute("aria-expanded", String(open));
+  b.textContent = open ? "Hide suggested fix" : "View suggested fix";
+});
+$("scrim").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("drawer").hidden) closeDrawer(); });
+
+renderSummary(); renderChips(); renderRows();
+</script>
